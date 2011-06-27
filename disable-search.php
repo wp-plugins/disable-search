@@ -1,40 +1,50 @@
 <?php
+/**
+ * @package Disable_Search
+ * @author Scott Reilly
+ * @version 1.2.1
+ */
 /*
 Plugin Name: Disable Search
-Version: 1.0
-Plugin URI: http://coffee2code.com/wp-plugins/disable-search
+Version: 1.2.1
+Plugin URI: http://coffee2code.com/wp-plugins/disable-search/
 Author: Scott Reilly
 Author URI: http://coffee2code.com
 Description: Disable the search capabilities of WordPress.
 
-Prevent WordPress from allowing and servicing any search requests for the blog.  Specifically, this plugin:
+Compatible with WordPress 2.8+, 2.9+, 3.0+, 3.1+, 3.2+.
 
-* Prevents the search form from appearing (if the theme is using the standard <code>get_search_form()</code>
-  function to retrieve and display the search form).
-* Prevents the Search widget from displaying the search form.
-* With or without the search form, the plugin prevents any direct or manual requests by visitors, via either
-  GET or POST requests, from actually returning any search results.
-* Submitted attempts at a search will be given a 404 File Not Found response, rendered by your sites 404.php
-  template, if present.
+DEVELOPMENT NOTE: Due to the way WordPress hardcodes the search and inclusion
+of the searchform.php file in either the active theme or its parent, it is
+not possible for a plugin to prevent loading that form if get_search_form() is
+used and the template is present in either theme location.  In order to
+prevent the form contained in searchform.php from being shown, the template
+file searchform.php must be renamed or deleted from both the current theme and
+its parent.
 
-Compatible with WordPress 2.6+, 2.7+, 2.8+.
+See http://core.trac.wordpress.org/ticket/13239 for my patch that would allow
+plugins to hook a filter in locate_template() to "hide" an existing template
+file form being detected by WordPress (among other things the filter would
+allow).
 
-=>> Read the accompanying readme.txt file for more information.  Also, visit the plugin's homepage
-=>> for more information and the latest updates
+=>> Read the accompanying readme.txt file for instructions and documentation.
+=>> Also, visit the plugin's homepage for additional information and updates.
+=>> Or visit: http://wordpress.org/extend/plugins/disable-search/
 
-Installation:
-
-1. Download the file http://coffee2code.com/wp-plugins/disable-search.zip and unzip it into your 
-/wp-content/plugins/ directory.
-2. Activate the plugin through the 'Plugins' admin menu in WordPress
+TODO:
+	* Rather than responding to search requests with a 404 error, allow response to be configurable:
+		* 404
+		* Redirect to a post or page
+		* Redirect back home (but set some sort of flag that can be detected so the theme can display a message)
+		* Act as if search was performed but no results were found
 */
 
 /*
-Copyright (c) 2008-2009 by Scott Reilly (aka coffee2code)
+Copyright (c) 2008-2011 by Scott Reilly (aka coffee2code)
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation 
-files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, 
-modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the 
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy,
+modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the
 Software is furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
@@ -45,36 +55,58 @@ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRA
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-if ( !class_exists('DisableSearch') ) :
+if ( ! class_exists( 'c2c_DisableSearch' ) ) :
 
-class DisableSearch {
+class c2c_DisableSearch {
 
-	function DisableSearch() {
-		if ( !is_admin() ) {
-			add_action('parse_query', array(&$this, 'parse_query'));
-			add_filter('get_search_form', array(&$this, 'get_search_form'));
-		}
+	/**
+	 * Hooks actions and filters.
+	 */
+	public static function init() {
+		add_action( 'widgets_init',    array( __CLASS__, 'disable_search_widget' ), 1 );
+		if ( ! is_admin() )
+			add_action( 'parse_query', array( __CLASS__, 'parse_query' ), 5 );
+		add_filter( 'get_search_form', array( __CLASS__, 'get_search_form' ), 1 );
 	}
 
-	function get_search_form($form) {
+	/**
+	 * Disables the built-in WP search widget
+	 */
+	public static function disable_search_widget() {
+		unregister_widget( 'WP_Widget_Search' );
+	}
+
+	/**
+	 * Returns nothing as the search form.
+	 *
+	 * @param string $form The search form to be displayed
+	 * @return string Always returns an empty string.
+	 */
+	public static function get_search_form( $form ) {
 		return '';
 	}
 
-	function parse_query($obj) {
+	/**
+	 * Unsets all search-related variables in WP_Query object and sets the request as a 404 if a search was attempted.
+	 *
+	 * @param object $obj A WP_Query object
+	 * @return null
+	 */
+	public static function parse_query( $obj ) {
 		if ( $obj->is_search ) {
-			unset($_GET['s']);
-			unset($_POST['s']);
-			unset($_REQUEST['s']);
-			$obj->set('s', '');
+			unset( $_GET['s'] );
+			unset( $_POST['s'] );
+			unset( $_REQUEST['s'] );
+			$obj->set( 's', '' );
 			$obj->is_search = false;
 			$obj->set_404();
 		}
 	}
-} // end DisableSearch
+} // end c2c_DisableSearch
+
+
+c2c_DisableSearch::init();
 
 endif; // end if !class_exists()
-
-if ( class_exists('DisableSearch') )
-	new DisableSearch();
 
 ?>
