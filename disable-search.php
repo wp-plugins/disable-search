@@ -1,72 +1,79 @@
 <?php
 /**
+ * Plugin Name: Disable Search
+ * Version:     1.4.2
+ * Plugin URI:  http://coffee2code.com/wp-plugins/disable-search/
+ * Author:      Scott Reilly
+ * Author URI:  http://coffee2code.com/
+ * License:     GPLv2 or later
+ * License URI: http://www.gnu.org/licenses/gpl-2.0.html
+ * Description: Disable the built-in front-end search capabilities of WordPress.
+ *
+ * Compatible with WordPress 3.6 through 4.3+.
+ *
+ * =>> Read the accompanying readme.txt file for instructions and documentation.
+ * =>> Also, visit the plugin's homepage for additional information and updates.
+ * =>> Or visit: https://wordpress.org/plugins/disable-search/
+ *
  * @package Disable_Search
- * @author Scott Reilly
- * @version 1.2.1
+ * @author  Scott Reilly
+ * @version 1.4.2
  */
-/*
-Plugin Name: Disable Search
-Version: 1.2.1
-Plugin URI: http://coffee2code.com/wp-plugins/disable-search/
-Author: Scott Reilly
-Author URI: http://coffee2code.com
-Description: Disable the search capabilities of WordPress.
-
-Compatible with WordPress 2.8+, 2.9+, 3.0+, 3.1+, 3.2+.
-
-DEVELOPMENT NOTE: Due to the way WordPress hardcodes the search and inclusion
-of the searchform.php file in either the active theme or its parent, it is
-not possible for a plugin to prevent loading that form if get_search_form() is
-used and the template is present in either theme location.  In order to
-prevent the form contained in searchform.php from being shown, the template
-file searchform.php must be renamed or deleted from both the current theme and
-its parent.
-
-See http://core.trac.wordpress.org/ticket/13239 for my patch that would allow
-plugins to hook a filter in locate_template() to "hide" an existing template
-file form being detected by WordPress (among other things the filter would
-allow).
-
-=>> Read the accompanying readme.txt file for instructions and documentation.
-=>> Also, visit the plugin's homepage for additional information and updates.
-=>> Or visit: http://wordpress.org/extend/plugins/disable-search/
-
-TODO:
-	* Rather than responding to search requests with a 404 error, allow response to be configurable:
-		* 404
-		* Redirect to a post or page
-		* Redirect back home (but set some sort of flag that can be detected so the theme can display a message)
-		* Act as if search was performed but no results were found
-*/
 
 /*
-Copyright (c) 2008-2011 by Scott Reilly (aka coffee2code)
+ * TODO:
+ * - Rather than responding to search requests with a 404 error, allow response to be configurable:
+ *     404
+ *     404 with custom error message (e.g. Search has been disabled)
+ *     Redirect to a post or page
+ *     Redirect back home (but set some sort of flag that can be detected so the theme can display a message)
+ *     Act as if search was performed but no results were found
+ * - Filter to allows searching to be conditionally enabled (query obj as arg)
+ * - Allow front-end searches for admins (and/or all logged in users?), via a Reading option and/or filters
+ */
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation
-files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy,
-modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the
-Software is furnished to do so, subject to the following conditions:
+/*
+	Copyright (c) 2008-2015 by Scott Reilly (aka coffee2code)
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+	This program is free software; you can redistribute it and/or
+	modify it under the terms of the GNU General Public License
+	as published by the Free Software Foundation; either version 2
+	of the License, or (at your option) any later version.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
-OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
-LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
+
+	You should have received a copy of the GNU General Public License
+	along with this program; if not, write to the Free Software
+	Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
+
+defined( 'ABSPATH' ) or die();
 
 if ( ! class_exists( 'c2c_DisableSearch' ) ) :
 
 class c2c_DisableSearch {
 
 	/**
+	 * Returns version of the plugin.
+	 *
+	 * @since 1.3
+	 */
+	public static function version() {
+		return '1.4.2';
+	}
+
+	/**
 	 * Hooks actions and filters.
 	 */
 	public static function init() {
 		add_action( 'widgets_init',    array( __CLASS__, 'disable_search_widget' ), 1 );
-		if ( ! is_admin() )
+		if ( ! is_admin() ) {
 			add_action( 'parse_query', array( __CLASS__, 'parse_query' ), 5 );
-		add_filter( 'get_search_form', array( __CLASS__, 'get_search_form' ), 1 );
+		}
+		add_filter( 'get_search_form', array( __CLASS__, 'get_search_form' ), 999 );
 	}
 
 	/**
@@ -79,7 +86,8 @@ class c2c_DisableSearch {
 	/**
 	 * Returns nothing as the search form.
 	 *
-	 * @param string $form The search form to be displayed
+	 * @param  string $form The search form to be displayed.
+	 *
 	 * @return string Always returns an empty string.
 	 */
 	public static function get_search_form( $form ) {
@@ -87,26 +95,26 @@ class c2c_DisableSearch {
 	}
 
 	/**
-	 * Unsets all search-related variables in WP_Query object and sets the request as a 404 if a search was attempted.
+	 * Unsets all search-related variables in WP_Query object and sets the
+	 * request as a 404 if a search was attempted.
 	 *
-	 * @param object $obj A WP_Query object
-	 * @return null
+	 * @param  object $obj A WP_Query object.
 	 */
 	public static function parse_query( $obj ) {
-		if ( $obj->is_search ) {
+		if ( $obj->is_search && $obj->is_main_query() ) {
 			unset( $_GET['s'] );
 			unset( $_POST['s'] );
 			unset( $_REQUEST['s'] );
+			unset( $obj->query['s'] );
 			$obj->set( 's', '' );
 			$obj->is_search = false;
 			$obj->set_404();
 		}
 	}
+
 } // end c2c_DisableSearch
 
 
 c2c_DisableSearch::init();
 
 endif; // end if !class_exists()
-
-?>
